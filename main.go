@@ -25,6 +25,10 @@ type Address struct{
 
 //Server Types
 
+type CreateServer struct{
+	server_name string `json:"server_name,omitempty"`
+}
+
 type ChannelId struct {
 	channelId string `json:"channelId,omitempty"`
 }
@@ -47,12 +51,25 @@ type ChannelCreaterData struct {
 	channel_color string `json:"channel_color,omitempty"`
 }
 
+type ChannelUserCreater struct {
+	github_id string `json:"github_id,omitempty"`
+	channel_id string `json:"channel_id,omitempty"`
+}
+
 type SuccessMessage struct {
 	message string `json:"success,omitempty"`
 }
 
 type Flag struct {
 	flag bool `json:"success,omitempty"`
+}
+
+type MessagePost struct {
+	channel_id string `json:"channel_id"`
+	content string `json:"content"`
+	loom_embed string `json:"loom_embed"`
+	language string `json:"language"`
+	is_code string `json:"is_code"`
 }
 
 
@@ -88,7 +105,7 @@ func main(){
 	router.HandleFunc("/api/myChannelsByServer/{id}", ApiMyChannelsByServerId).Methods("GET")
 	router.HandleFunc("/api/myChannels/{user}", ApiMyChannels).Methods("GET")
 	router.HandleFunc("/api/myServers/admin/{user}", ApiMyServersAdmin).Methods("GET")
-	router.HandleFunc("/api/add/channelUser", ApiAddChannelUser).Methods("POST")
+	router.HandleFunc("/api/add/channelUser/{user}", ApiAddChannelUser).Methods("POST")
 	router.HandleFunc("/api/channel/permissions/{channel_id}/{user}", ApiChannelPermissions).Methods("GET")
 	router.HandleFunc("/api/messages/{channelId}", ApiMessagesByChannelId).Methods("GET")
 	router.HandleFunc("/api/messages/{user}", ApiMessages).Methods("POST")

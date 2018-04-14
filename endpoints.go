@@ -81,10 +81,10 @@ func ApiChannelUsersByChannelID(w http.ResponseWriter, req *http.Request){
 }
 
 func ApiCreateServer(w http.ResponseWriter, req *http.Request){
-	var server_name string `json:"server_name,omitempty"`
+	var server CreateServer
 	params := mux.Vars(req)
-	_ = json.NewDecoder(req.Body).Decode(&server_name)
-	r, e := db.Query("insert into server(admin_github_id, server_name) values ( $1, $2 ); select * from server where admin_github_id = $1", params["user"], server_name)
+	_ = json.NewDecoder(req.Body).Decode(&server)
+	r, e := db.Query("insert into server(admin_github_id, server_name) values ( $1, $2 ); select * from server where admin_github_id = $1", params["user"], server.server_name)
 	json.NewEncoder(w).Encode(r)
 }
 
@@ -104,9 +104,13 @@ func ApiDeleteChannel (w http.ResponseWriter, req *http.Request){
 	params := mux.Vars(req)
 	r, e := db.Query("select * from channel_users join channel on channel_users.channel_id = channel.id join server on channel.server_id = server.id where user_id = $1", params["user"])
 	var flag bool = false
-	for index, item := range r{
-		if(r[index].admin_github_id == params["user"] && r[index].channel_id == params["id"]){
-			flag = true 
+	defer r.Close()
+	for r.Next(){
+		var admin_github_id string
+		var channel_id string
+		err = r.Scan(&admin_github_id, &channel_id)
+		if (admin_github_id == params["user"] && channel_id == params["id"]){
+			flag = true
 			break
 		}
 	}
@@ -124,7 +128,10 @@ func ApiCreateChannel(w http.ResponseWriter, req *http.Request){
 	_ = json.NewDecoder(req.Body).Decode(&c)
 	r, e := db.Query("insert into channel(server_id, channel_name, channel_color) values ( $1, $2, $3);", c.server_id, c.channel_name, c.channel_color)
 	ro, er := db.Query("select id from channel where server_id = $1 and channel_name = $2;", c.server_id, c.channel_name)
-	rows, err := db.Query("insert into channel_users(user_id, channel_id) values ( $1, $2 );", params["user"], ro[0].id)
+	defer ro.Close()
+	var id string
+	ro.Scan(&id)
+	rows, err := db.Query("insert into channel_users(user_id, channel_id) values ( $1, $2 );", params["user"], id)
 	json.NewEncoder(w).Encode(&SuccessMessage{message: "Successfully created channel"})
 }
 
@@ -154,7 +161,30 @@ func ApiMyServersAdmin (w http.ResponseWriter, req *http.Request){
 }
 
 func ApiAddChannelUser(w http.ResponseWriter, req *http.Request){
-
+	params := mux.Vars(req)
+	var chanInstance ChannelUserCreater
+	_ = json.NewDecoder(req.Body).Decode(&chanInstance)
+	if params["user"] == chanInstance.github_id{
+		var e ErroredResponse
+		json.NewEncoder(w).Encode(&e{message: "Cannot invite yourself to a channel"})
+		return
+	}
+	r, e := db.Query("select * from channel_users where user_id = $1 and channel_id = $2", params["user"], chanInstance.channel_id)
+	defer r.Close()
+	if r.Next(){
+		ro, er := db.Query("select * from channel_users where user_id = $1 and channel_id = $2", chanInstance.github_id , chanInstance.channel_id)
+		if ro.Next(){
+			var myResponse ErroredResponse
+			json.NewEncoder(w).Encode(&myResponse{message: "Cannot add a person more that once"})
+		} else {
+			rows, errors := db.Query("insert into channel_users(user_id,channel_id) values ( $1, $2 );", chanInstance.github_id, chanInstance.channel_id)
+			var success SuccessMessage
+			json.NewEncoder(w).Encode(&success{message: "User added to channel"})
+			return
+		}
+	}
+	var myFinalResponse ErroredResponse
+	json.NewEncoder(w).Encode(&myFinalResponse{message: "You do not have permisssions, as you are not it the channel"})
 }
 
 func ApiChannelPermissions(w http.ResponseWriter, req *http.Request){
@@ -162,20 +192,29 @@ func ApiChannelPermissions(w http.ResponseWriter, req *http.Request){
 	var cid ChannelId
 	_ = json.NewDecoder(req.Body).Decode(&cid)
 	r, e := db.Query("select * from channnel_users where user_id = $1 and channel_id = $2;", params["user"], cid.channelId)
-	var myflag Flag
-	if r[0] == true {
-		json.NewEncoder(w).Encode(&myflag{ flag: true})
+	defer r.Close()
+	
+	flag := r.Next()
+	if flag == true {
+		json.NewEncoder(w).Encode(&Flag{ flag: true})
 		return
 	}
-	json.NewEncoder(w).Encode(&myflag{ flag: false})
+	json.NewEncoder(w).Encode(&Flag{ flag: false})
 }
 
 func ApiMessagesByChannelId(w http.ResponseWriter, req *http.Request){
-	
+	params := mux.Vars(req)
+	r, e := db.Query("select messages.id, user_id, channel_id, content, is_code, language, loom_embed, timestamp, github_nickname, picture  from messages join users on messages.user_id = users.github_id where channel_id = $1 order by messages.id desc;", params["channelId"])
+	json.NewEncoder(w).Encode(r)
 }
 
 func ApiMessages(w http.ResponseWriter, req *http.Request){
+	params := mux.Vars(req)
+	var message MessagePost
+	_ = json.NewDecoder(req.Body).Decode(&message)
+	r, e := db.Query("insert into messages(user_id, channel_id, content, is_code, language, loom_embed values ($1, $2, $3, $4, $5, $6);", params["user"], message.channel_id, message.content, message.is_code, message.language, message.loom_embed)
 	
+	json.NewEncoder(w).Encode(&SuccessMessage{message: "message stored"})
 }
 
 
